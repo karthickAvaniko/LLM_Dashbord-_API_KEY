@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scp:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(e:/llmDashboard/frontend/.env.example:*)",
+      "Bash(npm run build:*)"
+    ]
+  }
+}

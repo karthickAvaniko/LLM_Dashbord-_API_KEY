@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Gateway</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0a0a0f;--bg2:#0f0f16;--bg3:#14141e;--bg4:#1a1a28;
+  --border:#1e1e30;--border2:#2a2a42;
+  --text:#e2e2f0;--text2:#8888aa;--text3:#44445a;
+  --accent:#7c6dff;--accent2:#5a4dcc;
+  --green:#2eff9a;--green2:#00cc6a;--red:#ff4d6a;--yellow:#ffc94d;
+  --mono:'JetBrains Mono',monospace;--sans:'Space Grotesk',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:9999;}
+.shell{display:flex;height:100vh;}
+.sidebar{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.main{flex:1;overflow-y:auto;background:var(--bg);}
+.logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.logo-icon{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;}
+.logo-text{font-family:var(--mono);font-size:13px;font-weight:500;}
+.logo-sub{font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:0.1em;text-transform:uppercase;}
+.nav-section{padding:16px 0 8px;}
+.nav-label{padding:0 16px 6px;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);font-family:var(--mono);}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 16px;cursor:pointer;font-size:13px;color:var(--text2);transition:all 0.15s;border-left:2px solid transparent;font-family:var(--mono);}
+.nav-item:hover{color:var(--text);background:var(--bg3);}
+.nav-item.active{color:var(--accent);background:rgba(124,109,255,0.08);border-left-color:var(--accent);}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:0.6;}
+.sidebar-bottom{margin-top:auto;padding:16px;border-top:1px solid var(--border);}
+.status-pill{display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--mono);color:var(--text2);}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.page-header{padding:28px 32px 0;border-bottom:1px solid var(--border);}
+.page-title{font-size:20px;font-weight:600;letter-spacing:-0.02em;margin-bottom:4px;}
+.page-sub{font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:20px;}
+.tab-row{display:flex;gap:0;margin-bottom:-1px;}
+.tab{padding:8px 18px;font-size:12px;font-family:var(--mono);cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;transition:all 0.15s;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.content{padding:28px 32px;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;}
+.stat-label{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);font-family:var(--mono);margin-bottom:8px;}
+.stat-value{font-size:24px;font-weight:600;font-family:var(--mono);}
+.stat-value.green{color:var(--green);}
+.stat-value.accent{color:var(--accent);}
+.stat-value.yellow{color:var(--yellow);}
+.stat-sub{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:4px;}
+.section{background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;}
+.section-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);}
+.section-title{font-size:12px;font-family:var(--mono);font-weight:500;}
+.section-body{padding:18px;}
+.table{width:100%;border-collapse:collapse;}
+.table th{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);font-family:var(--mono);padding:0 12px 10px;text-align:left;font-weight:400;}
+.table td{font-size:12px;font-family:var(--mono);padding:10px 12px;border-top:1px solid var(--border);color:var(--text2);}
+.table tr:hover td{background:var(--bg3);color:var(--text);}
+.key-cell{color:var(--accent);}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);}
+.badge.active{background:rgba(46,255,154,0.1);color:var(--green);border:1px solid rgba(46,255,154,0.2);}
+.badge.inactive{background:rgba(255,77,106,0.1);color:var(--red);border:1px solid rgba(255,77,106,0.2);}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:12px;font-family:var(--mono);cursor:pointer;border:none;transition:all 0.15s;font-weight:500;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2);}
+.btn-ghost:hover{color:var(--text);}
+.btn-danger{background:rgba(255,77,106,0.1);color:var(--red);border:1px solid rgba(255,77,106,0.2);}
+.btn-sm{padding:4px 10px;font-size:11px;}
+.form-group{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.form-label{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);font-family:var(--mono);}
+.form-input{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;font-size:12px;font-family:var(--mono);color:var(--text);outline:none;transition:border 0.15s;width:100%;}
+.form-input:focus{border-color:var(--accent);}
+.form-input::placeholder{color:var(--text3);}
+textarea.form-input{resize:vertical;}
+.terminal{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--green);white-space:pre-wrap;word-break:break-all;}
+.terminal .dim{color:var(--text3);}
+.terminal .acc{color:var(--accent);}
+.terminal .yel{color:var(--yellow);}
+.code-block{background:var(--bg);border:1px solid var(--border);border-radius:6px;position:relative;margin-top:8px;}
+.code-block pre{padding:14px;font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--text2);overflow-x:auto;}
+.code-lang{position:absolute;top:8px;left:14px;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);font-family:var(--mono);}
+.endpoint-card{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:10px;}
+.endpoint-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.method{padding:2px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);font-weight:700;}
+.method.post{background:rgba(124,109,255,0.15);color:var(--accent);}
+.method.get{background:rgba(46,255,154,0.1);color:var(--green);}
+.endpoint-path{font-family:var(--mono);font-size:12px;}
+.endpoint-desc{font-size:11px;color:var(--text2);margin-bottom:8px;}
+.chart-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.chart-label{font-size:10px;font-family:var(--mono);color:var(--text2);width:140px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chart-track{flex:1;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;}
+.chart-fill{height:100%;background:var(--accent);border-radius:2px;}
+.chart-val{font-size:10px;font-family:var(--mono);color:var(--text3);width:50px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:24px;width:420px;}
+.modal-title{font-size:14px;font-family:var(--mono);font-weight:500;margin-bottom:4px;}
+.modal-sub{font-size:11px;color:var(--text2);font-family:var(--mono);margin-bottom:20px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;}
+.key-reveal{background:var(--bg);border:1px solid var(--green);border-radius:6px;padding:12px;font-family:var(--mono);font-size:12px;color:var(--green);word-break:break-all;margin:12px 0;}
+.portal-hero{background:linear-gradient(135deg,rgba(124,109,255,0.08),rgba(0,0,0,0));border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:20px;}
+.portal-hero h2{font-size:18px;font-weight:600;margin-bottom:6px;}
+.portal-hero p{font-size:12px;color:var(--text2);font-family:var(--mono);}
+.notif{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px 16px;font-size:12px;font-family:var(--mono);color:var(--text);display:flex;align-items:center;gap:8px;z-index:200;animation:slideUp 0.3s ease;}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.empty{text-align:center;padding:30px;color:var(--text3);font-family:var(--mono);font-size:12px;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">AI</div>
+      <div>
+        <div class="logo-text">Gateway</div>
+        <div class="logo-sub">v1.0.0</div>
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Admin</div>
+      <div class="nav-item active" onclick="nav('overview')" id="nav-overview"><div class="nav-dot"></div>Overview</div>
+      <div class="nav-item" onclick="nav('keys')" id="nav-keys"><div class="nav-dot"></div>API Keys</div>
+      <div class="nav-item" onclick="nav('usage')" id="nav-usage"><div class="nav-dot"></div>Usage Logs</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">User Portal</div>
+      <div class="nav-item" onclick="nav('portal')" id="nav-portal"><div class="nav-dot"></div>My API Key</div>
+      <div class="nav-item" onclick="nav('docs')" id="nav-docs"><div class="nav-dot"></div>API Docs</div>
+      <div class="nav-item" onclick="nav('test')" id="nav-test"><div class="nav-dot"></div>Playground</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="status-pill">
+        <div class="status-dot"></div>
+        <span id="status-text">Checking...</span>
+      </div>
+    </div>
+  </div>
+  <div class="main" id="main"></div>
+</div>
+<div class="modal-overlay" id="modal" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-body"></div>
+</div>
+<div class="notif" id="notif" style="display:none">
+  <span id="notif-icon">✓</span><span id="notif-text"></span>
+</div>
+<script>
+// ── Config ─────────────────────────────────────────────────────────────────
+// Change this to your RunPod IP:PORT
+const API = 'http://localhost:1111';
+const ADMIN = 'admin_secret_change_this';
+
+let S = {
+  page: 'overview',
+  keys: [], logs: [], summary: [],
+  userKey: localStorage.getItem('gw_key') || '',
+  testOut: ''
+};
+
+// ── Notify ─────────────────────────────────────────────────────────────────
+function notify(msg, ok=true){
+  const n=document.getElementById('notif');
+  document.getElementById('notif-text').textContent=msg;
+  document.getElementById('notif-icon').textContent=ok?'✓':'✗';
+  n.style.display='flex';
+  n.style.borderColor=ok?'var(--green)':'var(--red)';
+  setTimeout(()=>n.style.display='none',2500);
+}
+function copy(t){navigator.clipboard.writeText(t);notify('Copied!');}
+
+// ── Nav ─────────────────────────────────────────────────────────────────────
+function nav(p){
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  const el=document.getElementById('nav-'+p);
+  if(el) el.classList.add('active');
+  S.page=p; render();
+}
+
+// ── API ─────────────────────────────────────────────────────────────────────
+async function loadKeys(){
+  try{const r=await fetch(`${API}/admin/keys/list?admin_secret=${ADMIN}`);const d=await r.json();S.keys=d.keys||[];}
+  catch(e){S.keys=[];}
+}
+async function loadUsage(){
+  try{const r=await fetch(`${API}/admin/usage?admin_secret=${ADMIN}`);const d=await r.json();S.logs=d.logs||[];S.summary=d.summary||[];}
+  catch(e){S.logs=[];S.summary=[];}
+}
+async function doCreate(name,rate){
+  try{
+    const r=await fetch(`${API}/admin/keys/create`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,rate_limit:parseInt(rate),admin_secret:ADMIN})});
+    const d=await r.json();
+    if(d.api_key){await loadKeys();showNewKey(d.api_key,name);notify('Key created!');}
+  }catch(e){notify('Error',false);}
+}
+async function doDelete(id){
+  try{await fetch(`${API}/admin/keys/${id}?admin_secret=${ADMIN}`,{method:'DELETE'});await loadKeys();notify('Revoked');render();}
+  catch(e){notify('Error',false);}
+}
+async function doTest(key,prompt,thinking){
+  try{
+    const r=await fetch(`${API}/v1/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key},body:JSON.stringify({messages:[{role:'user',content:prompt}],max_tokens:500,enable_thinking:thinking})});
+    const d=await r.json();
+    return d.choices?.[0]?.message?.content||JSON.stringify(d,null,2);
+  }catch(e){return 'Error: '+e.message;}
+}
+async function checkHealth(){
+  try{const r=await fetch(`${API}/health`);if(r.ok)document.getElementById('status-text').textContent='vLLM Online ✓';}
+  catch(e){document.getElementById('status-text').textContent='Offline';}
+}
+
+// ── Modals ─────────────────────────────────────────────────────────────────
+function showCreateModal(){
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">Create API Key</div>
+    <div class="modal-sub">Generate a new key for a user or app</div>
+    <div class="form-group"><div class="form-label">Key Name</div><input class="form-input" id="m-name" placeholder="e.g. production"/></div>
+    <div class="form-group"><div class="form-label">Rate Limit (req/day)</div><input class="form-input" id="m-rate" value="100" type="number"/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCreate()">Create</button>
+    </div>`;
+  document.getElementById('modal').style.display='flex';
+}
+async function submitCreate(){
+  const name=document.getElementById('m-name').value.trim();
+  const rate=document.getElementById('m-rate').value;
+  if(!name){notify('Enter name',false);return;}
+  closeModal();
+  await doCreate(name,rate);
+}
+function showNewKey(key,name){
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-title">✓ Key Created: ${name}</div>
+    <div class="modal-sub">Copy now — won't be shown again</div>
+    <div class="key-reveal">${key}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="copy('${key}')">Copy</button>
+      <button class="btn btn-primary" style="flex:1" onclick="closeModal()">Done</button>
+    </div>`;
+  document.getElementById('modal').style.display='flex';
+}
+function closeModal(){document.getElementById('modal').style.display='none';}
+
+// ── Pages ──────────────────────────────────────────────────────────────────
+function render(){
+  const fns={overview:pgOverview,keys:pgKeys,usage:pgUsage,portal:pgPortal,docs:pgDocs,test:pgTest};
+  document.getElementById('main').innerHTML=(fns[S.page]||pgOverview)();
+}
+
+function pgOverview(){
+  const tReq=S.summary.reduce((a,b)=>a+b.total_requests,0);
+  const tTok=S.summary.reduce((a,b)=>a+(b.total_prompt_tokens||0)+(b.total_completion_tokens||0),0);
+  return `
+  <div class="page-header"><div class="page-title">Overview</div><div class="page-sub">$ gateway status --all</div></div>
+  <div class="content">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Keys</div><div class="stat-value accent">${S.keys.length}</div><div class="stat-sub">${S.keys.filter(k=>k.is_active).length} active</div></div>
+      <div class="stat-card"><div class="stat-label">Total Requests</div><div class="stat-value green">${tReq.toLocaleString()}</div><div class="stat-sub">all time</div></div>
+      <div class="stat-card"><div class="stat-label">Tokens Used</div><div class="stat-value yellow">${(tTok/1000).toFixed(1)}K</div><div class="stat-sub">prompt + completion</div></div>
+      <div class="stat-card"><div class="stat-label">Model</div><div class="stat-value" style="font-size:13px;margin-top:4px">Qwen3-VL-32B</div><div class="stat-sub">FP8 · port 8000</div></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Usage by Key</div></div>
+      <div class="section-body">
+        ${S.summary.length===0?'<div class="empty">No usage yet</div>':S.summary.map(s=>{
+          const max=Math.max(...S.summary.map(x=>x.total_requests));
+          const pct=max>0?(s.total_requests/max)*100:0;
+          return `<div class="chart-bar"><div class="chart-label">${s.api_key.substring(0,22)}…</div><div class="chart-track"><div class="chart-fill" style="width:${pct}%"></div></div><div class="chart-val">${s.total_requests}</div></div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Recent Logs</div></div>
+      <div style="padding:0">
+        <table class="table">
+          <thead><tr><th>Time</th><th>Key</th><th>Endpoint</th><th>Tokens</th><th>Status</th></tr></thead>
+          <tbody>
+            ${S.logs.slice(0,8).map(l=>`<tr><td>${l.timestamp.substring(11,19)}</td><td class="key-cell">${l.api_key.substring(0,16)}…</td><td>${l.endpoint}</td><td>${(l.prompt_tokens||0)+(l.completion_tokens||0)}</td><td><span class="badge ${l.status==='success'?'active':'inactive'}">${l.status}</span></td></tr>`).join('')||'<tr><td colspan="5" class="empty">No logs yet</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function pgKeys(){
+  return `
+  <div class="page-header"><div class="page-title">API Keys</div><div class="page-sub">$ keys --list</div></div>
+  <div class="content">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="showCreateModal()">+ Create Key</button>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">All Keys (${S.keys.length})</div></div>
+      <div style="padding:0">
+        <table class="table">
+          <thead><tr><th>#</th><th>Name</th><th>Key</th><th>Rate</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            ${S.keys.length===0?'<tr><td colspan="7" class="empty">No keys — create one</td></tr>':S.keys.map(k=>`
+              <tr>
+                <td>${k.id}</td><td>${k.name}</td>
+                <td class="key-cell" onclick="copy('${k.key}')" style="cursor:pointer" title="Click to copy">${k.key.substring(0,22)}…</td>
+                <td>${k.rate_limit}/day</td>
+                <td><span class="badge ${k.is_active?'active':'inactive'}">${k.is_active?'active':'inactive'}</span></td>
+                <td>${k.created_at.substring(0,10)}</td>
+                <td>${k.is_active?`<button class="btn btn-danger btn-sm" onclick="doDelete(${k.id})">Revoke</button>`:'—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function pgUsage(){
+  return `
+  <div class="page-header"><div class="page-title">Usage Logs</div><div class="page-sub">$ logs --tail 100</div></div>
+  <div class="content">
+    <div class="stats-row" style="grid-template-columns:repeat(3,1fr)">
+      ${S.summary.slice(0,3).map(s=>`<div class="stat-card"><div class="stat-label">${s.api_key.substring(3,20)}…</div><div class="stat-value accent">${s.total_requests}</div><div class="stat-sub">${((s.total_prompt_tokens||0)+(s.total_completion_tokens||0)).toLocaleString()} tokens</div></div>`).join('')||'<div class="stat-card"><div class="stat-label">No data</div><div class="stat-value">—</div></div>'}
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Request Log</div></div>
+      <div style="padding:0">
+        <table class="table">
+          <thead><tr><th>Time</th><th>API Key</th><th>Endpoint</th><th>Prompt</th><th>Completion</th><th>Status</th></tr></thead>
+          <tbody>
+            ${S.logs.length===0?'<tr><td colspan="6" class="empty">No logs yet</td></tr>':S.logs.map(l=>`
+              <tr><td>${l.timestamp.substring(11,19)}</td><td class="key-cell">${l.api_key.substring(0,16)}…</td><td>${l.endpoint}</td><td>${l.prompt_tokens||0}</td><td>${l.completion_tokens||0}</td><td><span class="badge ${l.status==='success'?'active':'inactive'}">${l.status}</span></td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function pgPortal(){
+  return `
+  <div class="page-header"><div class="page-title">My API Key</div><div class="page-sub">$ whoami --show-key</div></div>
+  <div class="content">
+    <div class="portal-hero"><h2>User Portal</h2><p>Save your API key to test and view usage</p></div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Your Key</div></div>
+      <div class="section-body">
+        <div class="form-group">
+          <div class="form-label">API Key</div>
+          <div style="display:flex;gap:8px">
+            <input class="form-input" id="uk" placeholder="ak_..." value="${S.userKey}" style="flex:1"/>
+            <button class="btn btn-primary" onclick="saveKey()">Save</button>
+          </div>
+        </div>
+        ${S.userKey?`<div class="terminal"><span class="dim">// Example usage</span>
+curl -X POST ${API}/v1/chat/completions \\
+  -H <span class="acc">"x-api-key: ${S.userKey}"</span> \\
+  -H "Content-Type: application/json" \\
+  -d '{"messages":[{"role":"user","content":"Hello!"}]}'</div>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function saveKey(){
+  S.userKey=document.getElementById('uk').value.trim();
+  localStorage.setItem('gw_key',S.userKey);
+  notify('Saved!'); render();
+}
+
+function pgDocs(){
+  return `
+  <div class="page-header"><div class="page-title">API Docs</div><div class="page-sub">$ docs --format markdown</div></div>
+  <div class="content">
+    <div class="section" style="margin-bottom:16px">
+      <div class="section-head"><div class="section-title">Authentication</div></div>
+      <div class="section-body">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Add header to every request:</p>
+        <div class="code-block"><div class="code-lang">header</div><pre>x-api-key: ak_your_key_here</pre></div>
+      </div>
+    </div>
+    <div class="endpoint-card">
+      <div class="endpoint-row"><span class="method post">POST</span><span class="endpoint-path">/v1/chat/completions</span></div>
+      <div class="endpoint-desc">Chat with Qwen3-VL-32B. Supports text and image inputs.</div>
+      <div class="code-block"><div class="code-lang">json body</div><pre>{
+  "messages": [{"role": "user", "content": "Hello!"}],
+  "max_tokens": 2048,
+  "temperature": 0.0,
+  "enable_thinking": false
+}</pre></div>
+    </div>
+    <div class="endpoint-card">
+      <div class="endpoint-row"><span class="method post">POST</span><span class="endpoint-path">/v1/vision/analyze</span></div>
+      <div class="endpoint-desc">Upload image for OCR/analysis. Returns extracted JSON.</div>
+      <div class="code-block"><div class="code-lang">multipart/form-data</div><pre>file: &lt;image.jpg&gt;
+prompt: "Extract invoice data as JSON"
+enable_thinking: false</pre></div>
+    </div>
+    <div class="endpoint-card">
+      <div class="endpoint-row"><span class="method get">GET</span><span class="endpoint-path">/health</span></div>
+      <div class="endpoint-desc">Health check — no auth required.</div>
+    </div>
+    <div class="section" style="margin-top:16px">
+      <div class="section-head"><div class="section-title">Python Example</div></div>
+      <div class="section-body">
+        <div class="code-block"><div class="code-lang">python</div><pre>import requests
+
+API_KEY = "ak_your_key"
+BASE = "${API}"
+
+# Chat
+r = requests.post(f"{BASE}/v1/chat/completions",
+    headers={"x-api-key": API_KEY},
+    json={"messages": [{"role":"user","content":"Hello!"}]})
+print(r.json()["choices"][0]["message"]["content"])
+
+# Invoice OCR
+with open("invoice.jpg","rb") as f:
+    r = requests.post(f"{BASE}/v1/vision/analyze",
+        headers={"x-api-key": API_KEY},
+        files={"file": f},
+        data={"prompt": "Extract invoice JSON"})
+print(r.json()["result"])</pre></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function pgTest(){
+  return `
+  <div class="page-header"><div class="page-title">Playground</div><div class="page-sub">$ test --interactive</div></div>
+  <div class="content">
+    <div class="section">
+      <div class="section-head"><div class="section-title">Chat Test</div></div>
+      <div class="section-body">
+        <div class="form-group"><div class="form-label">API Key</div><input class="form-input" id="tk" value="${S.userKey}" placeholder="ak_..."/></div>
+        <div class="form-group"><div class="form-label">Message</div><textarea class="form-input" id="tp" rows="3">What is 2+2? Explain briefly.</textarea></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="tt"/>
+          <label for="tt" style="font-size:11px;font-family:var(--mono);color:var(--text2);cursor:pointer">Enable thinking mode</label>
+        </div>
+        <button class="btn btn-primary" id="tbtn" onclick="runTest()">Run →</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><div class="section-title">Response</div></div>
+      <div class="section-body">
+        <div class="terminal" id="tout">${S.testOut||'<span class="dim">// Response will appear here...</span>'}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function runTest(){
+  const key=document.getElementById('tk')?.value;
+  const prompt=document.getElementById('tp')?.value;
+  const thinking=document.getElementById('tt')?.checked;
+  if(!key||!prompt){notify('Enter key + message',false);return;}
+  const btn=document.getElementById('tbtn');
+  const out=document.getElementById('tout');
+  if(btn) btn.textContent='Running...';
+  if(out) out.innerHTML='<span class="dim">// Waiting...</span>';
+  const result=await doTest(key,prompt,thinking);
+  S.testOut=result;
+  if(out) out.textContent=result;
+  if(btn) btn.textContent='Run →';
+  notify('Done!');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+async function init(){
+  await Promise.all([loadKeys(),loadUsage()]);
+  render();
+  checkHealth();
+  setInterval(async()=>{await Promise.all([loadKeys(),loadUsage()]);render();},30000);
+}
+init();
+</script>
+</body>
+</html>

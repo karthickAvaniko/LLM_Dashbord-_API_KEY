@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invoice → JSON | Avaniko AI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #0a0a0f 0%, #14141c 100%);
+    color: #e0e0f0;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 32px; }
+  h1 {
+    font-size: 32px; font-weight: 700;
+    background: linear-gradient(90deg, #e8a828 0%, #f0c870 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  .subtitle { color: #707088; font-size: 14px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #14141c;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card h2 {
+    font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #707088;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card h2::before {
+    content: ''; width: 4px; height: 14px; background: #e8a828; border-radius: 2px;
+  }
+
+  /* Upload area */
+  .dropzone {
+    border: 2px dashed rgba(232,168,40,0.3);
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(232,168,40,0.03);
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: #e8a828;
+    background: rgba(232,168,40,0.08);
+  }
+  .dropzone-icon { font-size: 36px; margin-bottom: 8px; }
+  .dropzone-label { font-size: 14px; color: #b0b0c0; margin-bottom: 4px; }
+  .dropzone-hint { font-size: 11px; color: #505060; }
+  .dropzone input { display: none; }
+
+  /* File chip */
+  .file-chip {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: #1a1a24;
+    border: 1px solid rgba(232,168,40,0.25);
+    border-radius: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+  }
+  .file-chip .icon {
+    width: 36px; height: 36px;
+    background: rgba(232,168,40,0.12);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: #e8a828; font-weight: 700; font-size: 11px;
+    flex-shrink: 0;
+  }
+  .file-chip .info { flex: 1; min-width: 0; }
+  .file-chip .name {
+    font-weight: 500; color: #e0e0f0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-chip .size {
+    font-size: 11px; color: #707088;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .file-chip .remove {
+    background: transparent; border: none; cursor: pointer;
+    color: #707088; padding: 4px;
+  }
+  .file-chip .remove:hover { color: #f87171; }
+
+  /* Preview */
+  .preview {
+    margin-top: 14px;
+    border-radius: 8px;
+    background: #06060a;
+    overflow: hidden;
+    max-height: 480px;
+    border: 1px solid rgba(255,255,255,0.04);
+    display: none;
+  }
+  .preview.active { display: block; }
+  .preview img { width: 100%; max-height: 480px; object-fit: contain; display: block; }
+  .preview iframe { width: 100%; height: 480px; border: none; }
+  .preview .pdf-fallback {
+    padding: 30px 20px; text-align: center; color: #707088; font-size: 13px;
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 12px 24px;
+    border: none; border-radius: 8px;
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-primary {
+    background: #e8a828; color: #1a1004;
+  }
+  .btn-primary:hover { background: #f0c870; box-shadow: 0 0 0 3px rgba(232,168,40,0.3); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; color: #e0e0f0;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.05); }
+
+  .btn-row {
+    display: flex; gap: 10px; margin-top: 16px;
+  }
+
+  /* Result */
+  .json-output {
+    background: #06060a;
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: #ddd7e0;
+    white-space: pre-wrap;
+    overflow: auto;
+    max-height: 540px;
+  }
+  .json-output .key { color: #f0c870; }
+  .json-output .string { color: #5cb85c; }
+  .json-output .number { color: #26c6da; }
+  .json-output .boolean { color: #a78bfa; }
+  .json-output .null { color: #707088; font-style: italic; }
+
+  /* Status states */
+  .empty-state {
+    text-align: center; padding: 40px 20px;
+    color: #404050; font-size: 13px;
+  }
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; padding: 30px; color: #e8a828; font-size: 14px;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(232,168,40,0.2);
+    border-top-color: #e8a828;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error {
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.3);
+    border-radius: 8px;
+    padding: 14px 16px;
+    color: #f87171;
+    font-size: 13px;
+    display: none;
+  }
+  .error.active { display: block; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: rgba(92,184,92,0.12);
+    border: 1px solid rgba(92,184,92,0.4);
+    border-radius: 12px;
+    font-size: 10px; font-weight: 600;
+    color: #5cb85c;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .stats {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .config {
+    margin-top: 12px;
+    padding: 12px;
+    background: #06060a;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #707088;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .config label { display: block; margin-bottom: 6px; }
+  .config input {
+    width: 100%; padding: 6px 10px;
+    background: #14141c; color: #e0e0f0;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 4px;
+    font-family: inherit; font-size: 11px;
+  }
+  details { margin-top: 16px; }
+  summary {
+    cursor: pointer; font-size: 11px; color: #707088;
+    padding: 6px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <h1>📄 Invoice → JSON</h1>
+    <div class="subtitle">Powered by Avaniko AI · Qwen3.6-35B-A3B Vision</div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ─── LEFT: Upload + Preview ─── -->
+    <div class="card">
+      <h2>Upload Invoice</h2>
+
+      <label class="dropzone" id="dropzone">
+        <div class="dropzone-icon">📤</div>
+        <div class="dropzone-label">Drop invoice here or click to browse</div>
+        <div class="dropzone-hint">PDF · JPG · PNG · WEBP — up to 25 MB</div>
+        <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+      </label>
+
+      <div id="fileChip" style="display:none;"></div>
+
+      <div class="preview" id="preview"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="extractBtn" disabled>
+          ⚡ Extract JSON
+        </button>
+      </div>
+
+      <details>
+        <summary>⚙️ Settings</summary>
+        <div class="config">
+          <label>API URL:</label>
+          <input id="apiUrl" type="text" value="https://wo50dppqmt72bl-1111.proxy.runpod.net" />
+          <label style="margin-top:8px;">API Key:</label>
+          <input id="apiKey" type="password" value="ak_gsu4CbDhJtQYNrLzLarX0fUHQFdrCznC0Bqx58w9hz0" />
+        </div>
+      </details>
+    </div>
+
+    <!-- ─── RIGHT: Output ─── -->
+    <div class="card">
+      <h2>Extracted JSON</h2>
+
+      <div id="error" class="error"></div>
+
+      <div id="output">
+        <div class="empty-state">
+          Upload an invoice and click "Extract JSON" to begin.
+        </div>
+      </div>
+
+      <div class="btn-row" id="actionRow" style="display:none;">
+        <button class="btn btn-primary" id="downloadBtn">⬇ Download JSON</button>
+        <button class="btn btn-secondary" id="copyBtn">📋 Copy</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ════════════════════════════════════════════════════════════
+  let currentFile = null;
+  let currentJson = null;
+
+  const $ = id => document.getElementById(id);
+
+  // ── File picker ──
+  $('dropzone').addEventListener('click', () => $('fileInput').click());
+  $('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+  $('dropzone').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); });
+  $('dropzone').addEventListener('dragleave', e => e.currentTarget.classList.remove('dragover'));
+  $('dropzone').addEventListener('drop', e => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+    handleFile(e.dataTransfer.files[0]);
+  });
+
+  function handleFile(file) {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { alert('File too large (max 25 MB).'); return; }
+    currentFile = file;
+    renderFileChip(file);
+    renderPreview(file);
+    $('extractBtn').disabled = false;
+  }
+
+  function renderFileChip(file) {
+    const chip = $('fileChip');
+    const ext = (file.name.split('.').pop() || '').toUpperCase();
+    chip.innerHTML = `
+      <div class="file-chip">
+        <div class="icon">${ext}</div>
+        <div class="info">
+          <div class="name">${file.name}</div>
+          <div class="size">${(file.size/1024).toFixed(1)} KB · ${file.type || 'unknown'}</div>
+        </div>
+        <button class="remove" id="removeBtn" title="Remove">✕</button>
+      </div>`;
+    chip.style.display = 'block';
+    $('removeBtn').addEventListener('click', resetFile);
+  }
+
+  function renderPreview(file) {
+    const preview = $('preview');
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith('image/')) {
+      preview.innerHTML = `<img src="${url}" alt="preview" />`;
+    } else if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      preview.innerHTML = `
+        <iframe src="${url}#toolbar=0" title="PDF preview"></iframe>
+        <div class="pdf-fallback" style="display:none;">PDF preview unsupported in this browser</div>`;
+    } else {
+      preview.innerHTML = `<div class="pdf-fallback">No preview for this file type</div>`;
+    }
+    preview.classList.add('active');
+  }
+
+  function resetFile() {
+    currentFile = null; currentJson = null;
+    $('fileInput').value = '';
+    $('fileChip').style.display = 'none';
+    $('fileChip').innerHTML = '';
+    $('preview').classList.remove('active');
+    $('preview').innerHTML = '';
+    $('extractBtn').disabled = true;
+    $('output').innerHTML = '<div class="empty-state">Upload an invoice and click "Extract JSON" to begin.</div>';
+    $('actionRow').style.display = 'none';
+    $('error').classList.remove('active');
+    $('error').textContent = '';
+  }
+
+  // ── Extract ──
+  $('extractBtn').addEventListener('click', extract);
+
+  async function extract() {
+    if (!currentFile) return;
+    const baseUrl = $('apiUrl').value.replace(/\/+$/, '');
+    const apiKey = $('apiKey').value.trim();
+    if (!baseUrl || !apiKey) { showError('Set API URL and API key in settings.'); return; }
+
+    $('extractBtn').disabled = true;
+    $('error').classList.remove('active');
+    $('output').innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        Extracting fields from ${currentFile.name}…
+      </div>`;
+    $('actionRow').style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('file', currentFile);
+    fd.append('prompt', 'Extract this invoice. Output valid JSON only.');
+    fd.append('mode', 'invoice');
+    fd.append('max_tokens', '4096');
+    fd.append('temperature', '0');
+
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`${baseUrl}/v1/vision/analyze`, {
+        method: 'POST',
+        headers: { 'X-API-Key': apiKey },
+        body: fd,
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`API error ${res.status}: ${txt.slice(0, 250)}`);
+      }
+      const data = await res.json();
+      const text = data.text || data.result || '';
+
+      // Parse JSON from response
+      const parsed = parseJson(text);
+      currentJson = parsed;
+
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+      const usage = data.usage || {};
+
+      $('output').innerHTML = `
+        <div class="stats">
+          <span class="badge">✓ Extracted</span>
+          <span class="badge" style="color:#26c6da;border-color:rgba(38,198,218,0.4);background:rgba(38,198,218,0.1)">${elapsed}s</span>
+          <span class="badge" style="color:#a78bfa;border-color:rgba(167,139,250,0.4);background:rgba(167,139,250,0.1)">↑ ${usage.input_tokens || 0} tokens</span>
+          <span class="badge" style="color:#f0c870;border-color:rgba(240,200,112,0.4);background:rgba(240,200,112,0.1)">↓ ${usage.output_tokens || 0} tokens</span>
+        </div>
+        <div class="json-output">${syntaxHighlight(JSON.stringify(parsed, null, 2))}</div>
+      `;
+      $('actionRow').style.display = 'flex';
+    } catch (err) {
+      showError(err.message || String(err));
+      $('output').innerHTML = '<div class="empty-state">Failed. Check error above.</div>';
+    } finally {
+      $('extractBtn').disabled = false;
+    }
+  }
+
+  function parseJson(text) {
+    if (!text) return {};
+    let t = text.trim();
+    if (t.startsWith('```')) {
+      const parts = t.split('```');
+      if (parts.length >= 2) {
+        t = parts[1];
+        if (t.startsWith('json')) t = t.slice(4);
+        t = t.trim();
+      }
+    }
+    try { return JSON.parse(t); }
+    catch {
+      const start = t.indexOf('{'), end = t.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        try { return JSON.parse(t.slice(start, end + 1)); } catch {}
+      }
+      return { _raw: text, _parse_error: true };
+    }
+  }
+
+  function syntaxHighlight(json) {
+    return json
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g, m => {
+        let cls = 'number';
+        if (/^"/.test(m)) cls = /:$/.test(m) ? 'key' : 'string';
+        else if (/true|false/.test(m)) cls = 'boolean';
+        else if (/null/.test(m)) cls = 'null';
+        return `<span class="${cls}">${m}</span>`;
+      });
+  }
+
+  function showError(msg) {
+    $('error').textContent = '⚠ ' + msg;
+    $('error').classList.add('active');
+  }
+
+  // ── Download ──
+  $('downloadBtn').addEventListener('click', () => {
+    if (!currentJson) return;
+    const blob = new Blob([JSON.stringify(currentJson, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const baseName = (currentFile?.name || 'invoice').replace(/\.[^.]+$/, '');
+    a.download = `${baseName}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ── Copy ──
+  $('copyBtn').addEventListener('click', async () => {
+    if (!currentJson) return;
+    await navigator.clipboard.writeText(JSON.stringify(currentJson, null, 2));
+    const b = $('copyBtn');
+    const orig = b.textContent;
+    b.textContent = '✓ Copied';
+    setTimeout(() => { b.textContent = orig; }, 1500);
+  });
+
+</script>
+
+</body>
+</html>

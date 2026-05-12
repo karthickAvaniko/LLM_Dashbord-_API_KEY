@@ -1,0 +1,73 @@
+{
+  "invoice_number": "VG/78/25-26",
+  "invoice_date": "30-Apr-25",
+  "seller_name": "LAKSHMI ASSOCIATES",
+  "seller_address": "6/1273, METTUPALAYAM ROAD NEAR SAIBABA TEMPLE COIMBATORE-641043",
+  "seller_gstin": "33ARUPS7312L1Z5",
+  "seller_state": "Tamil Nadu",
+  "seller_state_code": "33",
+  "seller_contact": "0422-2439963, 4384945",
+  "buyer_name": "BHARATH ELECTRONICS & APPLIANCES - SNG",
+  "buyer_address": "373/D, TRICHY ROAD, AGRAHARAM, SINGANALLUR, COIMBATORE, 641005",
+  "buyer_gstin": "33AADFB6812A1Z7",
+  "buyer_state": "Tamil Nadu",
+  "buyer_state_code": "33",
+  "buyer_contact_person": "SABARI",
+  "buyer_contact": "7373048747",
+  "eway_bill_no": "571808698598",
+  "items": [
+    {
+      "description": "V-GUARD:STABILIZER:VG 50 CHERRY",
+      "hsn_sac": "90328910",
+      "gst_rate": "18%",
+      "quantity": "12 Nos",
+      "rate": "1,112.50",
+      "amount": "13,350.00"
+    },
+    {
+      "description": "V-GUARD:STABILIZER:VG 50 GREY",
+      "hsn_sac": "90328910",
+      "gst_rate": "18%",
+      "quantity": "12 Nos",
+      "rate": "1,112.50",
+      "amount": "13,350.00"
+    },
+    {
+      "description": "V-GUARD:STABILIZER:VSDI 50 CHERRY",
+      "hsn_sac": "90328910",
+      "gst_rate": "18%",
+      "quantity": "8 Nos",
+      "rate": "1,446.25",
+      "amount": "11,570.00"
+    },
+    {
+      "description": "V-GUARD:STABILIZER:VSDI 50 GREY",
+      "hsn_sac": "90328910",
+      "gst_rate": "18%",
+      "quantity": "8 Nos",
+      "rate": "1,446.25",
+      "amount": "11,570.00"
+    }
+  ],
+  "subtotal": "49,840.00",
+  "cgst_amount": "4,485.60",
+  "sgst_amount": "4,485.60",
+  "round_off": "-0.20",
+  "total_amount": "58,811.00",
+  "total_taxable_value": "49,840.00",
+  "total_cgst": "4,485.60",
+  "total_sgst": "4,485.60",
+  "total_tax_amount": "8,971.20",
+  "amount_chargeable_words": "INR Fifty Eight Thousand Eight Hundred Eleven Only",
+  "tax_amount_words": "INR Eight Thousand Nine Hundred Seventy One and Twenty paise Only",
+  "company_pan": "ARUPS7312L",
+  "bank_details": {
+    "account_holder_name": "LAKSHMI ASSOCIATES",
+    "bank_name": "City Union Bank",
+    "account_number": "034120000176095",
+    "branch_ifs_code": "Ramnagar & CIUB0000034"
+  },
+  "irn": "bfec8e4a1276343ad16bd1c6e3cf8440f2198fee0fdb741c8d-e68840099642fd",
+  "ack_no": "152521534427964",
+  "ack_date": "30-Apr-25"
+}

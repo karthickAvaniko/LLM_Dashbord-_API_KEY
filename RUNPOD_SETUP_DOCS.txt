@@ -1,0 +1,287 @@
+================================================================================
+   AI API GATEWAY — RUNPOD SETUP DOCUMENTATION
+   Date: April 17, 2026
+   Project: Avaniko Technologies — AI Inference Platform
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. OBJECTIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Build a Gemini/Claude-style AI API platform on RunPod where:
+- Admin can create and manage API keys
+- Users call the API using their key (like Gemini API)
+- Model: Qwen3-VL-32B-FP8 (vision + text + thinking mode)
+- Use case: Invoice OCR, Chat, Coding
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. INFRASTRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Platform     : RunPod
+GPU          : NVIDIA A40 (48GB VRAM)
+Pricing      : $0.44/hr On-Demand
+Container    : runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+Container disk : 50GB (temporary)
+Network Volume : 100GB — zealous_pink_basilisk (EU-SE-1) — NOT encrypted
+                 $0.07/GB/mo — persists even after pod terminate
+
+Pod IP       : 194.68.245.66
+SSH Port     : 22010
+SSH Command  : ssh root@194.68.245.66 -p 22010 -i ~/.ssh/id_ed25519
+
+CUDA Version : 12.8
+Driver       : 570.211.01
+PyTorch      : 2.4.0
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. MODEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Model        : Qwen3-VL-32B-Instruct-FP8 (Official Qwen release)
+HuggingFace  : Qwen/Qwen3-VL-32B-Instruct-FP8
+Location     : /workspace/Qwen3-VL-32B-FP8
+Size         : ~35GB (7 shards)
+Quantization : FP8 (nearly identical accuracy to BF16)
+VRAM used    : 33.91GB out of 48GB
+
+Shards downloaded:
+  model-00001-of-00007.safetensors  5.32GB  ✓
+  model-00002-of-00007.safetensors  5.37GB  ✓
+  model-00003-of-00007.safetensors  5.37GB  ✓
+  model-00004-of-00007.safetensors  5.37GB  ✓
+  model-00005-of-00007.safetensors  5.37GB  ✓
+  model-00006-of-00007.safetensors  5.37GB  ✓
+  model-00007-of-00007.safetensors  3.37GB  ✓
+
+Download method used (final working):
+  python3 with HF_HUB_DISABLE_XET=1 + hf_hub_download() one file at a time
+  (wget/curl failed due to xet bridge redirect issue on network volume)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. vLLM SERVER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+vLLM Version : 0.19.0
+Port         : 8000
+Command:
+
+  python -m vllm.entrypoints.openai.api_server \
+    --model /workspace/Qwen3-VL-32B-FP8 \
+    --quantization fp8 \
+    --dtype bfloat16 \
+    --max-model-len 8192 \
+    --gpu-memory-utilization 0.90 \
+    --max-num-seqs 4 \
+    --port 8000 \
+    --host 0.0.0.0 \
+    --trust-remote-code
+
+Parameters:
+  --max-model-len 8192     : Context window (8K tokens)
+  --gpu-memory-utilization : 90% of 48GB = 43.2GB
+  --max-num-seqs 4         : Max 4 concurrent requests
+  --quantization fp8       : FP8 inference
+
+Test command (verified working):
+  curl -X POST http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{"model":"/workspace/Qwen3-VL-32B-FP8","messages":[{"role":"user","content":"Hello"}]}'
+
+Response confirmed: "Hello! Yes, I'm working and ready to help you."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. FASTAPI GATEWAY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File         : /workspace/gateway.py
+Port         : 1111
+Database     : /workspace/gateway.db (SQLite)
+Admin Secret : admin_secret_change_this  ← CHANGE THIS IN PRODUCTION
+
+Start command:
+  python /workspace/gateway.py
+
+Dependencies:
+  pip install fastapi uvicorn httpx python-multipart aiofiles -q
+
+API Endpoints:
+  GET  /dashboard                  → Serves dashboard HTML
+  GET  /health                     → Health check (no auth)
+  GET  /                           → Endpoint list
+
+  POST /admin/keys/create          → Create API key (admin only)
+  GET  /admin/keys/list            → List all keys (admin only)
+  DELETE /admin/keys/{id}          → Revoke key (admin only)
+  GET  /admin/usage                → View usage logs (admin only)
+
+  POST /v1/chat/completions        → Chat with model (requires API key)
+  POST /v1/vision/analyze          → Image OCR/analysis (requires API key)
+
+Authentication:
+  All /v1/* endpoints require header: x-api-key: ak_xxxxx
+  All /admin/* endpoints require query param: admin_secret=xxxxx
+
+Database tables:
+  api_keys    : id, key, name, created_at, is_active, rate_limit
+  usage_logs  : id, api_key, endpoint, prompt_tokens, completion_tokens,
+                timestamp, status
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. DASHBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File         : /workspace/dashboard.html
+Access URL   : https://<pod-id>-1111.proxy.runpod.net/dashboard
+
+Pages:
+  Admin:
+    - Overview    : Stats (total keys, requests, tokens, model info)
+    - API Keys    : Create/revoke keys, view all keys
+    - Usage Logs  : Per-key request logs and token usage
+
+  User Portal:
+    - My API Key  : Save key, view example curl command
+    - API Docs    : Endpoint docs with Python code examples
+    - Playground  : Live chat test with thinking mode toggle
+
+Design: Dark terminal theme, JetBrains Mono font
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. HOW TO USE — API CALLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: Create API Key (Admin)
+  curl -X POST https://<pod>-1111.proxy.runpod.net/admin/keys/create \
+    -H "Content-Type: application/json" \
+    -d '{"name":"user1","admin_secret":"admin_secret_change_this","rate_limit":100}'
+  Response: {"api_key": "ak_xxxxx", "name": "user1"}
+
+Step 2: Chat API
+  curl -X POST https://<pod>-1111.proxy.runpod.net/v1/chat/completions \
+    -H "x-api-key: ak_xxxxx" \
+    -H "Content-Type: application/json" \
+    -d '{"messages":[{"role":"user","content":"Hello!"}],"max_tokens":500}'
+
+Step 3: Vision / Invoice OCR
+  curl -X POST https://<pod>-1111.proxy.runpod.net/v1/vision/analyze \
+    -H "x-api-key: ak_xxxxx" \
+    -F "file=@invoice.jpg" \
+    -F 'prompt=Extract invoice data as JSON'
+
+Step 4: Python Example
+  import requests
+  API_KEY = "ak_xxxxx"
+  BASE = "https://<pod>-1111.proxy.runpod.net"
+
+  # Chat
+  r = requests.post(f"{BASE}/v1/chat/completions",
+      headers={"x-api-key": API_KEY},
+      json={"messages": [{"role":"user","content":"Hello!"}]})
+  print(r.json()["choices"][0]["message"]["content"])
+
+  # Invoice OCR with thinking
+  with open("invoice.jpg","rb") as f:
+      r = requests.post(f"{BASE}/v1/vision/analyze",
+          headers={"x-api-key": API_KEY},
+          files={"file": f},
+          data={"prompt":"Extract all fields as JSON","enable_thinking":"true"})
+  print(r.json()["result"])
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. STARTUP PROCEDURE (Every time pod restarts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SSH into pod:
+  ssh root@<NEW_IP> -p <NEW_PORT> -i ~/.ssh/id_ed25519
+
+Terminal 1 — Start vLLM:
+  python -m vllm.entrypoints.openai.api_server \
+    --model /workspace/Qwen3-VL-32B-FP8 \
+    --quantization fp8 \
+    --dtype bfloat16 \
+    --max-model-len 8192 \
+    --gpu-memory-utilization 0.90 \
+    --max-num-seqs 4 \
+    --port 8000 \
+    --host 0.0.0.0 \
+    --trust-remote-code
+
+Wait for: "Application startup complet
+
+Terminal 2 — Start Gateway:
+  python /workspace/gateway.py
+
+Wait for: "Uvicorn running on http://0.0.0.0:1111"
+
+Access dashboard:
+  https://<pod-id>-1111.proxy.runpod.net/dashboard
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. ISSUES FACED & SOLUTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Issue 1: Disk quota exceeded during model download
+  Cause  : HuggingFace xet protocol writes temp files to container disk (/)
+  Fix    : Used HF_HUB_DISABLE_XET=1 + hf_hub_download() one file at a time
+           This writes directly to /workspace without temp files
+
+Issue 2: Encrypted volume 80GB had ~20GB actual quota
+  Cause  : RunPod encrypted volumes have hidden quota limits
+  Fix    : Created new unencrypted Network Volume (100GB)
+           Network volumes do NOT get deleted on pod terminate
+
+Issue 3: Pod GPU became unavailable
+  Cause  : A40 GPU taken by another user while pod was stopped
+  Fix    : Used "Automatically migrate Pod data" option — data preserved
+
+Issue 4: vLLM port 8001 already in use
+  Cause  : Another process was using port 8001
+  Fix    : Changed to port 8000
+
+Issue 5: gateway.py /dashboard route returned 404
+  Cause  : Code was appended after uvicorn.run() — never executed
+  Fix    : Rewrote complete gateway.py with correct route order
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+10. COST SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GPU (A40 48GB)      : $0.44/hr
+Container disk      : $0.007/hr (running)
+Network Volume 100GB: $0.01/hr
+Total running       : ~$0.46/hr
+
+Daily (8hr usage)   : ~$4/day
+Monthly (8hr/day)   : ~$120/month
+Monthly (24/7)      : ~$340/month
+
+Network Volume only : $7/month (100GB × $0.07)
+  → Model data safe even when pod is stopped
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11. FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/workspace/
+  Qwen3-VL-32B-FP8/     ← Model files (35GB)
+  gateway.py            ← FastAPI gateway server
+  gateway.db            ← SQLite database (keys + logs)
+  dashboard.html        ← Admin + User portal UI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+12. NEXT STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] Change ADMIN_SECRET in gateway.py to a strong password
+[ ] Test invoice OCR with real invoices
+[ ] Add Whisper voice-to-text endpoint
+[ ] Auto-start script (start vLLM + gateway on pod boot)
+[ ] React frontend integration
+[ ] Rate limiting per key enforcement
+[ ] MySQL migration for production (replace SQLite)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Prepared by: Claude (Anthropic) — Avaniko Technologies
+   April 17, 2026
+================================================================================

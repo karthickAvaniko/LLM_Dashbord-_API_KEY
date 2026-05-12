@@ -1,0 +1,27 @@
+{
+  "name": "avaniko-ai",
+  "version": "0.2.0",
+  "description": "Avaniko AI — Gemini-style JavaScript SDK. Chat, document extraction, code, vision — one API key for all.",
+  "main": "avaniko-ai.js",
+  "module": "avaniko-ai.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./avaniko-ai.js",
+      "require": "./avaniko-ai.js"
+    }
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": ["ai", "llm", "qwen", "vision", "ocr", "invoice", "extraction", "gemini"],
+  "author": "Avaniko Technologies",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/avaniko/avaniko-ai-js"
+  }
+}

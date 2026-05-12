@@ -1,0 +1,236 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS — light mode (:root) + dark mode (html.dark)
+   All Tailwind color tokens reference these variables.
+   Toggling `.dark` on <html> switches the entire theme.
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* Backgrounds */
+  --color-bg:           #F5F4FF;
+  --color-bg-card:      #FFFFFF;
+  --color-bg-elevated:  #FAFAFE;
+  --color-bg-raised:    #F0EFFC;
+  --color-bg-input:     #FFFFFF;
+  --color-bg-hover:     rgba(99,102,241,0.04);
+
+  /* Brand — indigo, same both modes */
+  --color-brand:        #6366F1;
+  --color-brand-light:  #4F46E5;
+  --color-brand-dark:   #3730A3;
+  --color-brand-muted:  rgba(99,102,241,0.10);
+  --color-brand-border: rgba(99,102,241,0.22);
+
+  /* Borders */
+  --color-border:       rgba(99,102,241,0.12);
+  --color-border-strong:rgba(99,102,241,0.28);
+
+  /* Text */
+  --color-text-primary:   #1A1540;
+  --color-text-secondary: #4B4580;
+  --color-text-muted:     #8880A8;
+
+  /* Surfaces (hover / active overlays) */
+  --color-surface:        rgba(99,102,241,0.05);
+  --color-surface-hover:  rgba(99,102,241,0.08);
+  --color-surface-active: rgba(99,102,241,0.13);
+
+  /* Status */
+  --color-status-success:    #16A34A;
+  --color-status-success-bg: rgba(22,163,74,0.08);
+  --color-status-danger:     #DC2626;
+  --color-status-danger-bg:  rgba(220,38,38,0.08);
+  --color-status-warning:    #D97706;
+  --color-status-warning-bg: rgba(217,119,6,0.08);
+  --color-status-info:       #2563EB;
+  --color-status-info-bg:    rgba(37,99,235,0.08);
+
+  /* Sidebar — white in light mode */
+  --color-sidebar-bg:     #FFFFFF;
+  --color-sidebar-border: rgba(99,102,241,0.10);
+  --color-sidebar-text:   #6B7280;
+  --color-sidebar-muted:  rgba(107,114,128,0.50);
+  --color-sidebar-active: rgba(99,102,241,0.08);
+}
+
+html.dark {
+  /* Backgrounds — layered from dark (page) → lighter (cards/nav) */
+  --color-bg:           #0D0B22;
+  --color-bg-card:      #1A1645;
+  --color-bg-elevated:  #201C52;
+  --color-bg-raised:    #251F58;
+  --color-bg-input:     #15123A;
+  --color-bg-hover:     rgba(255,255,255,0.04);
+
+  /* Brand — same indigo */
+  --color-brand:        #6366F1;
+  --color-brand-light:  #818CF8;
+  --color-brand-dark:   #4F46E5;
+  --color-brand-muted:  rgba(99,102,241,0.12);
+  --color-brand-border: rgba(99,102,241,0.28);
+
+  /* Borders */
+  --color-border:       rgba(255,255,255,0.07);
+  --color-border-strong:rgba(255,255,255,0.15);
+
+  /* Text */
+  --color-text-primary:   #F1F0FF;
+  --color-text-secondary: #C8C2F0;
+  --color-text-muted:     #7A6FAA;
+
+  /* Surfaces */
+  --color-surface:        rgba(255,255,255,0.04);
+  --color-surface-hover:  rgba(255,255,255,0.06);
+  --color-surface-active: rgba(255,255,255,0.09);
+
+  /* Status */
+  --color-status-success:    #4ADE80;
+  --color-status-success-bg: rgba(74,222,128,0.09);
+  --color-status-danger:     #F87171;
+  --color-status-danger-bg:  rgba(248,113,113,0.09);
+  --color-status-warning:    #FBBF24;
+  --color-status-warning-bg: rgba(251,191,36,0.09);
+  --color-status-info:       #60A5FA;
+  --color-status-info-bg:    rgba(96,165,250,0.09);
+
+  /* Sidebar — lighter than main bg so it reads as elevated */
+  --color-sidebar-bg:     #1F1B50;
+  --color-sidebar-border: rgba(255,255,255,0.08);
+  --color-sidebar-text:   #B0A8D8;
+  --color-sidebar-muted:  rgba(176,168,216,0.45);
+  --color-sidebar-active: rgba(99,102,241,0.18);
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-bg text-text-primary font-sans;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Smooth theme switch — scoped to structural elements to avoid fighting framer-motion */
+  body, .card, .card-raised, aside, header, main,
+  input, button, select, textarea, .nav-item {
+    transition: background-color 200ms ease, border-color 200ms ease, color 150ms ease;
+  }
+
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full;
+    background: var(--color-border-strong);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+  ::selection { background: var(--color-brand-muted); color: var(--color-text-primary); }
+}
+
+@layer components {
+  /* ─── Base card ─── */
+  .card {
+    @apply bg-bg-card border border-border rounded-card shadow-card;
+  }
+
+  /* ─── Raised card ─── */
+  .card-raised {
+    @apply bg-bg-raised border border-border rounded-card;
+  }
+
+  /* ─── Scrollable ─── */
+  .scrollable {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  /* ─── Code block ─── */
+  .code-block {
+    @apply bg-bg border border-border rounded-lg font-mono text-xs
+           text-text-secondary overflow-x-auto scrollable;
+  }
+
+  /* ─── Sidebar nav item ─── */
+  .nav-item {
+    @apply relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium
+           transition-all duration-150 cursor-pointer select-none;
+    color: var(--color-sidebar-text);
+  }
+  .nav-item:hover {
+    background: var(--color-sidebar-active);
+    color: var(--color-brand);
+  }
+  .nav-item.active {
+    background: linear-gradient(90deg, var(--color-brand-muted) 0%, transparent 100%);
+    color: var(--color-brand);
+    font-weight: 600;
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 20px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: linear-gradient(180deg, #818CF8, #6366F1);
+  }
+
+  /* ─── Gradient brand text ─── */
+  .gradient-text {
+    background: linear-gradient(to right, var(--color-brand), var(--color-brand-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ─── Divider ─── */
+  .divider {
+    @apply border-t border-border;
+  }
+
+  /* ─── Focus ring ─── */
+  .focus-brand:focus {
+    @apply outline-none;
+    box-shadow: 0 0 0 2px var(--color-brand-muted);
+    border-color: var(--color-brand-border);
+  }
+
+  /* ─── Input base ─── */
+  .input-base {
+    @apply w-full bg-bg-input border border-border rounded-lg px-3 py-2
+           text-sm text-text-primary placeholder:text-text-muted
+           transition-colors duration-150 outline-none;
+  }
+  .input-base:focus {
+    border-color: var(--color-border-strong);
+    box-shadow: 0 0 0 2px var(--color-brand-muted);
+  }
+
+  /* ─── Status dot ─── */
+  .status-dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full;
+  }
+
+  /* ─── Backward-compat alias ─── */
+  .glass-card { @apply card; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
