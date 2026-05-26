@@ -27,7 +27,7 @@ app.add_middleware(
 # Catch-all OPTIONS handler — guarantees preflight succeeds even when
 # RunPod proxy strips/rewrites headers in unexpected ways.
 @app.options("/{full_path:path}", include_in_schema=False)
-async def preflight(_full_path: str, request: Request):
+async def preflight(full_path: str, request: Request):
     origin = request.headers.get("origin", "*")
     return Response(
         status_code=204,
@@ -77,7 +77,7 @@ if os.path.isdir(_assets):
     app.mount("/assets", StaticFiles(directory=_assets), name="assets")
 
 @app.get("/{full_path:path}", include_in_schema=False)
-async def spa_fallback(_full_path: str):
+async def spa_fallback(full_path: str):
     index = os.path.join(settings.DIST_DIR, "index.html")
     if os.path.isfile(index):
         with open(index, "r", encoding="utf-8") as f:

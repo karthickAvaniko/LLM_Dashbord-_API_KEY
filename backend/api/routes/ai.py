@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Header, Form, File, UploadFile, HTTPException, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
-import httpx, base64, json, traceback
+import httpx, base64, json, traceback, asyncio
 from typing import List, Optional
 from backend.core.config import settings
 from backend.core.schemas import get_mode, list_modes
@@ -111,6 +111,9 @@ _CHUNK_TRIGGER   = 80_000   # estimated tokens → auto-chunk above this
 _CHUNK_SIZE      = 55_000   # tokens per map-phase chunk
 _CHUNK_OVERLAP   = 400      # overlap tokens between chunks
 
+_VISION_BATCH_SIZE = 10     # pages per parallel batch (match --limit-mm-per-prompt.image)
+_VISION_MAX_PAGES  = 100    # hard cap on total pages processed
+
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // _CHARS_PER_TOKEN)
@@ -190,6 +193,166 @@ async def _map_reduce(chunks: list, user_prompt: str, temperature: float,
         "chunks_processed": len(partial),
         "usage": {"input_tokens": pt, "output_tokens": ct, "total_tokens": pt + ct},
     }
+
+
+# ──────────────────────────────────────────────────────────────────
+#  Vision Map-Reduce — parallel page batches → stream progress → reduce
+# ──────────────────────────────────────────────────────────────────
+
+async def _process_single_batch(client, batch_urls, batch_idx, total_batches,
+                                 total_pages, prompt, mode, temperature, max_tokens):
+    """Process one image batch. Runs concurrently via asyncio.gather."""
+    start_page = batch_idx * _VISION_BATCH_SIZE + 1
+    end_page   = min((batch_idx + 1) * _VISION_BATCH_SIZE, total_pages)
+    msg_content = [
+        {"type": "image_url", "image_url": {"url": u}} for u in batch_urls
+    ]
+    msg_content.append({
+        "type": "text",
+        "text": (
+            f"[Batch {batch_idx+1}/{total_batches} — pages {start_page} to {end_page}]\n"
+            f"{prompt}\n"
+            "Extract only relevant facts from these pages. Be concise."
+        ),
+    })
+    messages = [{"role": "user", "content": msg_content}]
+    payload  = _build_payload(messages, min(max_tokens, 2048), temperature, mode=mode)
+    try:
+        resp = await client.post(f"{settings.VLLM_URL}/v1/chat/completions", json=payload)
+        if resp.status_code == 200:
+            rj   = resp.json()
+            u    = rj.get("usage", {})
+            text = _strip_think_tags(_extract_text(rj["choices"][0]))
+            return {
+                "ok":  True,
+                "idx": batch_idx,
+                "text": f"[Batch {batch_idx+1}/{total_batches} — pages {start_page}-{end_page}]\n{text}",
+                "pt":  u.get("prompt_tokens", 0),
+                "ct":  u.get("completion_tokens", 0),
+            }
+    except Exception:
+        pass
+    return {
+        "ok":  False,
+        "idx": batch_idx,
+        "text": f"[Batch {batch_idx+1}/{total_batches} — pages {start_page}-{end_page}: extraction failed]",
+        "pt":  0, "ct": 0,
+    }
+
+
+async def _vision_map_reduce_stream(image_urls, prompt, mode, temperature,
+                                     max_tokens, key_row, label):
+    """
+    Parallel vision map-reduce with SSE progress events.
+
+    Events emitted:
+      meta      — {pages, batches}
+      progress  — {done, total, message}
+      delta     — {text}  streaming reduce output
+      done      — {pages, batches, finish_reason, usage, model}
+      error     — {error}
+    """
+    urls      = image_urls[:_VISION_MAX_PAGES]
+    total     = len(urls)
+    batches   = [urls[i:i + _VISION_BATCH_SIZE] for i in range(0, total, _VISION_BATCH_SIZE)]
+    n_batches = len(batches)
+
+    yield f"data: {json.dumps({'event': 'meta', 'pages': total, 'batches': n_batches})}\n\n"
+
+    prompt_tokens, completion_tokens = 0, 0
+    partials = [None] * n_batches
+
+    # ── Parallel map phase ────────────────────────────────────────
+    async with httpx.AsyncClient(timeout=600) as client:
+        tasks = [
+            _process_single_batch(
+                client, batch, i, n_batches, total,
+                prompt, mode, temperature, max_tokens
+            )
+            for i, batch in enumerate(batches)
+        ]
+        for coro in asyncio.as_completed(tasks):
+            result = await coro
+            idx            = result["idx"]
+            partials[idx]  = result["text"]
+            prompt_tokens     += result["pt"]
+            completion_tokens += result["ct"]
+            done_count = sum(1 for p in partials if p is not None)
+            yield f"data: {json.dumps({'event': 'progress', 'done': done_count, 'total': n_batches, 'message': f'Processed batch {done_count}/{n_batches}'})}\n\n"
+
+    valid_partials = [p for p in partials if p]
+    if not valid_partials:
+        yield f"data: {json.dumps({'event': 'error', 'error': 'All batches failed — no data extracted.'})}\n\n"
+        return
+
+    yield f"data: {json.dumps({'event': 'progress', 'done': n_batches, 'total': n_batches, 'message': 'Merging results...'})}\n\n"
+
+    # ── Streaming reduce phase ────────────────────────────────────
+    reduce_msgs = [
+        {
+            "role": "system",
+            "content": (
+                "Merge these partial document extractions into one final answer. "
+                "Remove duplicates, preserve all unique facts, keep JSON structure if applicable."
+            ),
+        },
+        {
+            "role": "user",
+            "content": "\n\n".join(valid_partials) + f"\n\nOriginal request: {prompt}",
+        },
+    ]
+    reduce_payload = {
+        **_build_payload(reduce_msgs, max_tokens, temperature, mode=mode),
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+    think_filter  = ThinkFilter()
+    finish_reason = None
+    final_usage   = {}
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        async with client.stream(
+            "POST", f"{settings.VLLM_URL}/v1/chat/completions",
+            json=reduce_payload,
+            headers={"Accept": "text/event-stream"},
+        ) as resp:
+            if resp.status_code != 200:
+                err = (await resp.aread()).decode()[:300]
+                yield f"data: {json.dumps({'event': 'error', 'error': f'Reduce phase failed: {err}'})}\n\n"
+                return
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    tail = think_filter.flush()
+                    if tail:
+                        yield f"data: {json.dumps({'event': 'delta', 'text': tail})}\n\n"
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if chunk.get("usage"):
+                    final_usage = chunk["usage"]
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                c = choices[0]
+                if c.get("finish_reason"):
+                    finish_reason = c["finish_reason"]
+                raw = (c.get("delta") or {}).get("content") or ""
+                if raw:
+                    clean = think_filter.feed(raw)
+                    if clean:
+                        yield f"data: {json.dumps({'event': 'delta', 'text': clean})}\n\n"
+
+    prompt_tokens     += final_usage.get("prompt_tokens", 0)
+    completion_tokens += final_usage.get("completion_tokens", 0)
+    log_usage(key_row, label, prompt_tokens, completion_tokens)
+
+    yield f"data: {json.dumps({'event': 'done', 'pages': total, 'batches': n_batches, 'finish_reason': finish_reason or 'stop', 'usage': {'input_tokens': prompt_tokens, 'output_tokens': completion_tokens, 'total_tokens': prompt_tokens + completion_tokens}, 'model': settings.MODEL_DISPLAY_NAME})}\n\n"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -462,6 +625,43 @@ async def vision_analyze(
     try:
         content = await file.read()
         urls = _file_to_image_urls(file.filename or "", content, file.content_type or "")
+
+        # Large PDF → collect all SSE events and return final text as JSON
+        if len(urls) > _VISION_BATCH_SIZE:
+            final_text    = []
+            final_meta    = {}
+            final_usage   = {}
+            finish_reason = "stop"
+            async for raw_event in _vision_map_reduce_stream(
+                urls, prompt, mode, temperature, max_tokens,
+                key_row, "/v1/vision/analyze"
+            ):
+                if not raw_event.startswith("data:"):
+                    continue
+                try:
+                    ev = json.loads(raw_event[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                if ev.get("event") == "delta":
+                    final_text.append(ev.get("text", ""))
+                elif ev.get("event") == "done":
+                    final_meta  = ev
+                    final_usage = ev.get("usage", {})
+                    finish_reason = ev.get("finish_reason", "stop")
+                elif ev.get("event") == "error":
+                    raise HTTPException(502, ev.get("error", "Vision map-reduce failed"))
+            text = "".join(final_text)
+            return {
+                "id": "", "model": settings.MODEL_DISPLAY_NAME,
+                "text": text, "result": text,
+                "pages": final_meta.get("pages", len(urls)),
+                "batches": final_meta.get("batches", 1),
+                "batched": True, "mode": mode,
+                "finish_reason": finish_reason,
+                "usage": final_usage,
+            }
+
+        # Small file (≤ batch size) → single request
         msg_content = [{"type": "image_url", "image_url": {"url": u}} for u in urls]
         msg_content.append({"type": "text", "text": prompt})
         messages = [{"role": "user", "content": msg_content}]
@@ -473,13 +673,13 @@ async def vision_analyze(
             raise HTTPException(502, f"vLLM {resp.status_code}: {resp.text[:400]}")
         raw = resp.json()
         choice = raw["choices"][0]
-        text = _extract_text(choice)
+        text = _strip_think_tags(_extract_text(choice))
         usage = raw.get("usage", {})
         log_usage(key_row, "/v1/vision/analyze", usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
-        text = _strip_think_tags(text)
         return {
             "id": raw.get("id", ""), "model": settings.MODEL_DISPLAY_NAME,
-            "text": text, "result": text, "pages": len(urls), "mode": mode,
+            "text": text, "result": text,
+            "pages": len(urls), "batches": 1, "batched": False, "mode": mode,
             "finish_reason": choice.get("finish_reason", "stop"),
             "usage": {
                 "input_tokens": usage.get("prompt_tokens", 0),
@@ -511,21 +711,38 @@ async def vision_analyze_stream(
         urls = _file_to_image_urls(file.filename or "", content, file.content_type or "")
     except HTTPException as e:
         async def err_gen():
-            yield f"data: {json.dumps({'event':'error','error':e.detail})}\n\n"
+            yield f"data: {json.dumps({'event': 'error', 'error': e.detail})}\n\n"
         return StreamingResponse(err_gen(), media_type="text/event-stream")
 
+    _SSE_HEADERS = {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+
+    # Large PDF → parallel batched streaming with progress events
+    if len(urls) > _VISION_BATCH_SIZE:
+        return StreamingResponse(
+            _vision_map_reduce_stream(
+                urls, prompt, mode, temperature, max_tokens,
+                key_row, "/v1/vision/analyze/stream"
+            ),
+            media_type="text/event-stream",
+            headers=_SSE_HEADERS,
+        )
+
+    # Small file (≤ batch size) → single request with streaming
     msg_content = [{"type": "image_url", "image_url": {"url": u}} for u in urls]
     msg_content.append({"type": "text", "text": prompt})
     messages = [{"role": "user", "content": msg_content}]
     payload = _build_payload(messages, max_tokens, temperature, mode=mode)
 
     async def stream_with_meta():
-        yield f"data: {json.dumps({'event':'meta','pages':len(urls),'mode':mode or 'free'})}\n\n"
+        yield f"data: {json.dumps({'event': 'meta', 'pages': len(urls), 'batches': 1, 'mode': mode or 'free'})}\n\n"
         async for chunk in _stream_vllm(payload, key_row, "/v1/vision/analyze/stream"):
             yield chunk
 
-    return StreamingResponse(stream_with_meta(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
+    return StreamingResponse(stream_with_meta(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 # ──────────────────────────────────────────────────────────────────

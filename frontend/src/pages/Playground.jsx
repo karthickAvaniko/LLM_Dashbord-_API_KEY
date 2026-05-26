@@ -224,10 +224,11 @@ export default function Playground() {
           if (!data) continue
           try {
             const evt = JSON.parse(data)
-            if (evt.event === 'delta')    { acc += evt.text || ''; setStreamText(acc) }
+            if (evt.event === 'delta')         { acc += evt.text || ''; setStreamText(acc) }
             else if (evt.event === 'thinking') { setThinkingText(p => p + (evt.text || '')) }
             else if (evt.event === 'done')     { setStreamMeta({ model: evt.model, finish_reason: evt.finish_reason, usage: evt.usage }) }
             else if (evt.event === 'error')    { throw new Error(evt.error || 'stream error') }
+            else if (evt.text)                 { acc += evt.text; setStreamText(acc) }
           } catch (e) { if (e.message?.startsWith('stream error')) throw e }
         }
       }
